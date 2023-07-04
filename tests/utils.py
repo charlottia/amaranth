@@ -110,7 +110,8 @@ class FHDLTestCase(unittest.TestCase):
 
         This relationship is uneven because the reverse is not always true in
         every cast: ``-1`` is not shape-castable. An enum with
-        non-constant-castable member values is not shape-castable.
+        non-constant-castable member values is not shape-castable. These cases
+        must assert ``but_is_subclass=True``.
         """
         self.assertNotIsInstance(obj, ShapeCastable)
         if but_is_subclass:
@@ -119,3 +120,30 @@ class FHDLTestCase(unittest.TestCase):
             self.assertNotIsSubclass(type(obj), ShapeCastable)
         with self.assertRaises(TypeError):
             Shape.cast(obj)
+
+    def assertValueCastable(self, obj):
+        self.assertIsInstance(obj, ValueCastable)
+        self.assertIsSubclass(type(obj), ValueCastable)
+        try:
+            Value.cast(obj)
+        except TypeError:
+            raise AssertionError(f"{obj} failed Value.cast")
+
+    def assertNotValueCastable(self, obj, *, but_is_subclass=False):
+        """
+        The same note as in :meth:`assertNotShapeCastable` applies, except for
+        value-casting. ``SomeEnum.A`` where its value is constant-castable is an
+        instance of :class:`ValueCastable`; ``SomeEnum`` is a subclass of
+        :class:`ValueCastable`.
+
+        A non-constant-castable enum member value is not value-castable. A
+        :class:`CustomValueCastable` subclass whose :meth:`as_value` returns
+        something non-value-castable is not value-castable.
+        """
+        self.assertNotIsInstance(obj, ValueCastable)
+        if but_is_subclass:
+            self.assertIsSubclass(type(obj), ValueCastable)
+        else:
+            self.assertNotIsSubclass(type(obj), ValueCastable)
+        with self.assertRaises(TypeError):
+            Value.cast(obj)

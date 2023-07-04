@@ -3,7 +3,7 @@ import warnings
 
 from .._utils import *
 from amaranth.hdl import *
-from amaranth.hdl.ast import ShapeCastable, CustomShapeCastable, ValueCastable
+from amaranth.hdl.ast import ShapeCastable, CustomShapeCastable, ValueCastable, ValueCastableMeta
 
 
 __all__ = [
@@ -91,7 +91,7 @@ class Layout(ShapeCastable):
     """
     def __init_subclass__(cls):
         """Ensure subclasses override all abstract methods."""
-        for absmeth in ["__iter__", "__getitem__", "size"]:
+        for absmeth in ("__iter__", "__getitem__", "size"):
             assert Layout in cls.mro()
             for target in cls.mro():
                 if target is Layout:
@@ -726,7 +726,7 @@ class View(ValueCastable):
         return item
 
 
-class _AggregateMeta(ShapeCastable, type):
+class _AggregateMeta(ShapeCastable, ValueCastableMeta):
     def __new__(metacls, name, bases, namespace):
         if "__annotations__" not in namespace:
             # This is a base class without its own layout. It is not shape-castable, and cannot

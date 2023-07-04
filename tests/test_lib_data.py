@@ -72,7 +72,7 @@ class FieldTestCase(TestCase):
             Field(1, 0).offset = 1
 
 
-class StructLayoutTestCase(TestCase):
+class StructLayoutTestCase(FHDLTestCase):
     def test_construct(self):
         sl = StructLayout({
             "a": unsigned(1),
@@ -123,8 +123,16 @@ class StructLayoutTestCase(TestCase):
                 r"^Struct layout member shape must be a shape-castable object, not 1\.0$"):
             StructLayout({"a": 1.0})
 
+    def test_struct_layout_castable(self):
+        sl = StructLayout({
+            "a": unsigned(1),
+            "b": 2
+        })
+        self.assertShapeCastable(sl)
+        self.assertNotValueCastable(sl)
 
-class UnionLayoutTestCase(TestCase):
+
+class UnionLayoutTestCase(FHDLTestCase):
     def test_construct(self):
         ul = UnionLayout({
             "a": unsigned(1),
@@ -181,8 +189,16 @@ class UnionLayoutTestCase(TestCase):
                 r"\(specified: a, b\)$"):
             UnionLayout({"a": 1, "b": 2}).const(dict(a=1, b=2))
 
+    def test_union_layout_castable(self):
+        ul = UnionLayout({
+            "a": unsigned(1),
+            "b": 2
+        })
+        self.assertShapeCastable(ul)
+        self.assertNotValueCastable(ul)
 
-class ArrayLayoutTestCase(TestCase):
+
+class ArrayLayoutTestCase(FHDLTestCase):
     def test_construct(self):
         al = ArrayLayout(unsigned(2), 3)
         self.assertEqual(al.elem_shape, unsigned(2))
@@ -240,8 +256,13 @@ class ArrayLayoutTestCase(TestCase):
                 r"^Cannot index array layout with 'a'$"):
             al["a"]
 
+    def test_array_layout_castable(self):
+        al = ArrayLayout(2, 3)
+        self.assertShapeCastable(al)
+        self.assertNotValueCastable(al)
 
-class FlexibleLayoutTestCase(TestCase):
+
+class FlexibleLayoutTestCase(FHDLTestCase):
     def test_construct(self):
         il = FlexibleLayout(8, {
             "a": Field(unsigned(1), 1),
@@ -341,6 +362,11 @@ class FlexibleLayoutTestCase(TestCase):
         with self.assertRaisesRegex(TypeError,
                 r"^Cannot index flexible layout with <.+>$"):
             il[object()]
+
+    def test_flexible_layout_castable(self):
+        il = FlexibleLayout(8, {})
+        self.assertShapeCastable(il)
+        self.assertNotValueCastable(il)
 
 
 class LayoutTestCase(FHDLTestCase):
@@ -444,13 +470,6 @@ class LayoutTestCase(FHDLTestCase):
             class MockLayoutSubclassNoOverride(Layout):
                 pass
 
-    def test_layout_instance_subclass_checks(self):
-        sl = StructLayout({})
-        self.assertShapeCastable(sl)
-        self.assertIsInstance(sl, StructLayout)
-        self.assertIsSubclass(StructLayout, Layout)
-        self.assertIsSubclass(StructLayout, ShapeCastable)
-        self.assertNotIsSubclass(StructLayout, ArrayLayout)
 
 class ViewTestCase(FHDLTestCase):
     def test_construct(self):
@@ -646,6 +665,25 @@ class ViewTestCase(FHDLTestCase):
                 r"^View of \(sig \$signal\) with an array layout does not have fields$"):
             Signal(ArrayLayout(unsigned(1), 1), reset=[0]).reset
 
+    def test_view_castable(self):
+        s = Signal(3)
+        v = View(StructLayout({"a": unsigned(1), "b": unsigned(2)}), s)
+        self.assertValueCastable(v)
+        self.assertNotShapeCastable(v)
+
+    def test_implicit_view_castable(self):
+        v = Signal(UnionLayout({"a": 1, "b": 2}))
+        self.assertValueCastable(v)
+        self.assertNotShapeCastable(v)
+
+    def test_derived_view_castable(self):
+        class DerivedView(View):
+            def foo(self):
+                pass
+        v = DerivedView(StructLayout({"bar": unsigned(1)}), Signal(1))
+        self.assertValueCastable(v)
+        self.assertNotShapeCastable(v)
+
 
 class StructTestCase(FHDLTestCase):
     def test_construct(self):
@@ -772,6 +810,17 @@ class StructTestCase(FHDLTestCase):
         s2 = Signal.like(s1)
         self.assertEqual(s2.shape(), S)
 
+    def test_struct_castable(self):
+        class S(Struct):
+            a: 1
+        s = S(target=Signal())
+
+        self.assertShapeCastable(S)
+        self.assertNotValueCastable(S)
+
+        self.assertNotShapeCastable(s)
+        self.assertValueCastable(s)
+
 
 class UnionTestCase(FHDLTestCase):
     def test_construct(self):
@@ -818,6 +867,18 @@ class UnionTestCase(FHDLTestCase):
 
         self.assertEqual(Signal(U).as_value().reset, 0b01)
         self.assertEqual(Signal(U, reset=dict(b=0b10)).as_value().reset, 0b10)
+
+    def test_union_castable(self):
+        class U(Union):
+            a: 1
+            b: 2
+        u = U(target=Signal(2))
+
+        self.assertShapeCastable(U)
+        self.assertNotValueCastable(U)
+
+        self.assertNotShapeCastable(u)
+        self.assertValueCastable(u)
 
 
 # Examples from https://github.com/amaranth-lang/amaranth/issues/693

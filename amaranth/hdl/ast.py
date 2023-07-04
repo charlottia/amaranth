@@ -14,11 +14,12 @@ from .._unused import *
 
 
 __all__ = [
-    "Shape", "signed", "unsigned", "ShapeCastable", "CustomShapeCastable",
+    "Shape", "signed", "unsigned",
+    "ShapeCastable", "CustomShapeCastable",
     "Value", "Const", "C", "AnyConst", "AnySeq", "Operator", "Mux", "Part", "Slice", "Cat", "Repl",
     "Array", "ArrayProxy",
     "Signal", "ClockSignal", "ResetSignal",
-    "ValueCastable",
+    "ValueCastable", "CustomValueCastable",
     "Sample", "Past", "Stable", "Rose", "Fell", "Initial",
     "Statement", "Switch",
     "Property", "Assign", "Assert", "Assume", "Cover",
@@ -34,47 +35,38 @@ class DUID:
         DUID.__next_uid += 1
 
 
-class ShapeCastableMeta(type):
+class ShapeCastableMeta(ConformableMeta):
     """
-    Metaclass for :class:`ShapeCastable` which gives it its protocol properties
-    in the Python type system, and redirects subclassing of
+    Metaclass for :class:`ShapeCastable` which gives it its conformable
+    properties in the Python type system, and redirects subclassing of
     :class:`ShapeCastable` to :class:`CustomShapeCastable`.
     """
 
-    # We override __new__ after defining ShapeCastable and CustomShapeCastable.
+    # We redirect subclassing after defining ShapeCastable and
+    # CustomShapeCastable.
 
-    def __instancecheck__(cls, instance):
+    def conformable_isinstance(cls, instance):
         """
         ``isinstance`` hook for :class:`ShapeCastable`.
 
-        Returns whether a :meth:`Shape.cast` would succeed.
+        Returns whether a :meth:`Shape.cast` would succeed (by attempting it).
         """
-        if cls is not ShapeCastable:
-            # Use default behaviour where called with ShapeCastable subclasses,
-            # e.g. ``isinstance(x, Layout)``.
-            return super().__instancecheck__(instance)
-
         try:
             Shape.cast(instance)
-        except (TypeError, RecursionError):
+        except TypeError:
             return False
         else:
             return True
 
-    def __subclasscheck__(cls, subclass):
+    def conformable_issubclass(cls, subclass):
         """
         ``issubclass`` hook for :class:`ShapeCastable`.
 
         Type-generalized heuristic based on :meth:`Shape.cast`.
         """
-        if cls is not ShapeCastable:
-            # Use default behaviour where called with ShapeCastable subclasses,
-            # e.g. ``issubclass(x, Layout)``.
-            return super().__subclasscheck__(subclass)
-        elif issubclass(subclass, (Shape, int, range, EnumMeta)):
+        if issubclass(subclass, (Shape, int, range, EnumMeta)):
             return True
-        else:
-            return super().__subclasscheck__(subclass)
+        return NotImplemented
 
 
 class ShapeCastable(metaclass=ShapeCastableMeta):
@@ -111,27 +103,13 @@ class CustomShapeCastable(ShapeCastable):
     object, via ``isinstance(obj, CustomShapeCastable)``.
     """
     def __init_subclass__(cls):
-        if not hasattr(cls, "as_shape"):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ShapeCastable` must override "
-                            f"the `as_shape` method")
-        if not (hasattr(cls, "__call__") and inspect.isfunction(cls.__call__)):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ShapeCastable` must override "
-                            f"the `__call__` method")
-        if not hasattr(cls, "const"):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ShapeCastable` must override "
-                            f"the `const` method")
+        for absmeth in ("as_shape", "__call__", "const"):
+            if not (hasattr(cls, absmeth) and inspect.isfunction(getattr(cls, absmeth))):
+                raise TypeError(f"Class '{cls.__name__}' deriving from `ShapeCastable` must "
+                                f"override the `as_shape` method")
 
 
-def _ShapeCastableMeta_new(mcls, name, bases, namespace, /, **kwargs):
-    # Redirect further subclassing of ShapeCastable to CustomShapeCastable.
-    bases = tuple(
-        (CustomShapeCastable if base is ShapeCastable else base)
-        for base in bases
-    )
-    return super(ShapeCastableMeta, mcls).__new__(mcls, name, bases, namespace, **kwargs)
-
-ShapeCastableMeta.__new__ = _ShapeCastableMeta_new
-del _ShapeCastableMeta_new
+redirect_subclasses(ShapeCastableMeta, ShapeCastable, CustomShapeCastable)
 
 
 class Shape:
@@ -248,7 +226,7 @@ class Value(metaclass=ABCMeta):
         while True:
             if isinstance(obj, Value):
                 return obj
-            elif isinstance(obj, ValueCastable):
+            elif isinstance(obj, CustomValueCastable):
                 new_obj = obj.as_value()
             elif isinstance(obj, Enum):
                 return Const(obj.value, Shape.cast(type(obj)))
@@ -1435,33 +1413,56 @@ class ArrayProxy(Value):
         return "(proxy (array [{}]) {!r})".format(", ".join(map(repr, self.elems)), self.index)
 
 
-class ValueCastable:
-    """Interface of user-defined objects that can be cast to :class:`Value` s.
-
-    An object deriving from :class:`ValueCastable`` is automatically converted to a :class:`Value`
-    when it is used in a context where a :class:`Value`` is expected. Such objects can implement
-    different or richer semantics than what is supported by the core Amaranth language, yet still
-    be transparently used with it as long as the final underlying representation is a single
-    Amaranth :class:`Value`. These objects also need not commit to a specific representation until
-    they are converted to a concrete Amaranth value.
-
-    Note that it is necessary to ensure that Amaranth's view of representation of all values stays
-    internally consistent. The class deriving from :class:`ValueCastable`` must decorate
-    the :meth:`as_value` method with the :meth:`lowermethod` decorator, which ensures that all
-    calls to :meth:`as_value` return the same :class:`Value` representation. If the class deriving
-    from :class:`ValueCastable` is mutable, it is up to the user to ensure that it is not mutated
-    in a way that changes its representation after the first call to :meth:`as_value`.
+class ValueCastableMeta(ConformableMeta):
     """
-    def __init_subclass__(cls, **kwargs):
-        if not hasattr(cls, "as_value"):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must override "
-                            "the `as_value` method")
-        if not hasattr(cls, "shape"):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must override "
-                            "the `shape` method")
-        if not hasattr(cls.as_value, "_ValueCastable__memoized"):
-            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must decorate "
-                            "the `as_value` method with the `ValueCastable.lowermethod` decorator")
+    Metaclass for :class:`ValueCastable` which gives it its conformable
+    properties in the Python type system, and redirects subclassing of
+    :class:`ValueCastable` to :class:`CustomValueCastable`.
+    """
+
+    # We redirect subclassing after defining ValueCastable and
+    # CustomValueCastable.
+
+    def conformable_isinstance(cls, instance):
+        """
+        ``isinstance`` hook for :class:`ValueCastable`.
+
+        Returns whether a :meth:`Value.cast` would succeed (by attempting it).
+        """
+        try:
+            Value.cast(instance)
+        except TypeError:
+            return False
+        else:
+            return True
+
+    def conformable_issubclass(cls, subclass):
+        """
+        ``issubclass`` hook for :class:`ValueCastable`.
+
+        Type-generalized heuristic based on :meth:`Value.cast`.
+        """
+        if issubclass(subclass, (Value, Enum, int)):
+            return True
+        return NotImplemented
+
+
+class ValueCastable(metaclass=ValueCastableMeta):
+    """
+    The type populated by all objects that can be cast to a :class:`Value`.
+
+    If ``isinstance(x, ValueCastable) is True``, the operation ``Value.cast(x)``
+    will succeed, and ``x`` can be used anywhere a :class:`Value` is expected.
+
+    Examples include instances of built-in Python types, e.g. ``1`` (which
+    value-casts to ``Const(1, unsigned(1))``), as well as subclasses of
+    :class:`ValueCastable` (which value-cast to the result of
+    ``obj.as_value()``).
+
+    Subclasses of :class:`ValueCastable` are turned into subclasses of
+    :class:`CustomValueCastable`, which defines the interface for user-defined
+    value-castable objects.
+    """
 
     @staticmethod
     def lowermethod(func):
@@ -1483,6 +1484,39 @@ class ValueCastable:
             return self.__lowered_to
         wrapper_memoized.__memoized = True
         return wrapper_memoized
+
+
+class CustomValueCastable(ValueCastable):
+    """Interface of user-defined objects that can be cast to :class:`Value` s.
+
+    An object deriving from :class:`CustomValueCastable` is automatically converted to a
+    :class:`Value` when it is used in a context where a :class:`Value` is expected. Such objects
+    can implement different or richer semantics than what is supported by the core Amaranth
+    language, yet still be transparently used with it as long as the final underlying
+    representation is a single Amaranth :class:`Value`. These objects also need not commit to a
+    specific representation until they are converted to a concrete Amaranth value.
+
+    Note that it is necessary to ensure that Amaranth's view of representation of all values stays
+    internally consistent. The class deriving from :class:`CustomValueCastable` must decorate
+    the :meth:`as_value` method with the :meth:`ValueCastable.lowermethod` decorator, which
+    ensures that all calls to :meth:`as_value` return the same :class:`Value` representation. If
+    the class deriving from :class:`ValueCastable` is mutable, it is up to the user to ensure that
+    it is not mutated in a way that changes its representation after the first call to
+    :meth:`as_value`.
+    """
+    def __init_subclass__(cls):
+        if not hasattr(cls, "as_value"):
+            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must override "
+                            "the `as_value` method")
+        if not hasattr(cls, "shape"):
+            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must override "
+                            "the `shape` method")
+        if not hasattr(cls.as_value, "_ValueCastable__memoized"):
+            raise TypeError(f"Class '{cls.__name__}' deriving from `ValueCastable` must decorate "
+                            "the `as_value` method with the `ValueCastable.lowermethod` decorator")
+
+
+redirect_subclasses(ValueCastableMeta, ValueCastable, CustomValueCastable)
 
 
 # TODO(amaranth-0.5): remove

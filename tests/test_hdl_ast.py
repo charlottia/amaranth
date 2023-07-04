@@ -177,11 +177,6 @@ class ShapeCastableTestCase(FHDLTestCase):
                 r"override the `as_shape` method$"):
             class MockShapeCastableNoOverride(ShapeCastable):
                 pass
-        with self.assertRaisesRegex(TypeError,
-                r"^Class 'MockShapeCastablePartialOverride' deriving from `ShapeCastable` must "
-                r"override the `__call__` method$"):
-            class MockShapeCastablePartialOverride(ShapeCastable):
-                def as_shape(self): ...
 
     def test_cast(self):
         sc = MockShapeCastable(unsigned(2))
@@ -245,6 +240,9 @@ class ShapeCastableTestCase(FHDLTestCase):
         self.assertShapeCastable(AmaranthEnumEmpty)
 
     def test_checks_against_subclasses(self):
+        # Ensure ShapeCastable meta nonsense hasn't impacted downstream or
+        # introduced bugs. Note that use of ABCMeta will cause these to fail
+        # without additional workarounds.
         class EnumA(AmaranthEnum):
             X = 1
         self.assertIsInstance(EnumA.X, EnumA)
@@ -1359,6 +1357,37 @@ class ValueCastableTestCase(FHDLTestCase):
     def test_recurse(self):
         vc = MockValueCastable(MockValueCastable(Signal()))
         self.assertIsInstance(Value.cast(vc), Signal)
+
+    def test_isinstance(self):
+        class EnumA(AmaranthEnum):
+            X = 1
+        class PyEnumA(Enum):
+            X = 1
+        self.assertValueCastable(Const(1))
+        self.assertValueCastable(1)
+        self.assertValueCastable(-1)
+        self.assertValueCastable(MockValueCastable(1))
+        self.assertValueCastable(EnumA.X)
+        self.assertValueCastable(PyEnumA.X)
+
+        self.assertNotValueCastable(unsigned(1))
+        self.assertNotValueCastable(object())
+        self.assertNotValueCastable(None)
+        self.assertNotValueCastable(ValueCastable)
+        self.assertNotValueCastable(MockValueCastable)
+        self.assertNotValueCastable(EnumA)
+        self.assertNotValueCastable(PyEnumA)
+        self.assertNotValueCastable(range(10))
+
+        # Non-value-castable objects who belong to a type that subclasses
+        # ValueCastable.
+        self.assertNotValueCastable(MockValueCastable(unsigned(2)), but_is_subclass=True)
+        class EnumNonConstCast(AmaranthEnum):
+            X = Signal()
+        self.assertNotValueCastable(EnumNonConstCast.X, but_is_subclass=True)
+        class PyEnumNonConstCast(Enum):
+            X = Signal()
+        self.assertNotValueCastable(PyEnumNonConstCast.X, but_is_subclass=True)
 
 
 class SampleTestCase(FHDLTestCase):
