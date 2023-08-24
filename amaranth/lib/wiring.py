@@ -5,7 +5,7 @@ import inspect
 import re
 import warnings
 
-from ..hdl.ast import Shape, CustomShapeCastable, Const, Signal, Value, ValueCastable
+from ..hdl.ast import Shape, CustomShapeCastable, Const, Signal, Value, CustomValueCastable
 from ..hdl.ir import Elaboratable
 from .._utils import final
 
@@ -791,7 +791,7 @@ class Component(Elaboratable):
                 if name.startswith("_"):
                     continue
                 if (annot is Value or annot is Signal or annot is Const or
-                        (isinstance(annot, type) and issubclass(annot, ValueCastable)) or
+                        (isinstance(annot, type) and issubclass(annot, CustomValueCastable)) or
                         isinstance(annot, Signature)):
                     if isinstance(annot, type):
                         annot_repr = annot.__name__

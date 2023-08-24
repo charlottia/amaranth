@@ -1177,7 +1177,7 @@ class Signal(Value, DUID, metaclass=_SignalMeta):
             new_name = other.name + str(name_suffix)
         else:
             new_name = tracer.get_var_name(depth=2 + src_loc_at, default="$like")
-        if isinstance(other, ValueCastable):
+        if isinstance(other, CustomValueCastable):
             shape = other.shape()
         else:
             shape = Value.cast(other).shape()
