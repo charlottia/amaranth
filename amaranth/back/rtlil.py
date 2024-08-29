@@ -1020,6 +1020,8 @@ class ModuleEmitter:
             self.builder.connect(self.cell_wires[cell_idx].name, self.io_sigspec(cell.port))
 
     def emit_memory(self, cell_idx, cell):
+        if cell.init is None:
+            return
         memory_info = self.memories[cell_idx]
         self.builder.cell("$meminit_v2", ports={
             "ADDR": self.sigspec(),

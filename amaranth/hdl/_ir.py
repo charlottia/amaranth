@@ -1206,7 +1206,7 @@ class NetlistEmitter:
         cell = _nir.Memory(module_idx,
             width=_ast.Shape.cast(fragment._data._shape).width,
             depth=fragment._data._depth,
-            init=fragment._data._init._raw,
+            init=fragment._data._init._raw if fragment._data._init is not None else None,
             name=name,
             attributes=fragment._attrs,
             src_loc=fragment.src_loc,

@@ -154,14 +154,15 @@ class MemoryData:
         # shape and depth validation is performed in MemoryData.Init()
         self._shape = shape
         self._depth = depth
-        self._init = MemoryData.Init(init, shape=shape, depth=depth)
+        self._init = MemoryData.Init(init, shape=shape, depth=depth) if init else None
         self.src_loc = tracer.get_src_loc(src_loc_at=src_loc_at)
         self.name = tracer.get_var_name(depth=2+src_loc_at, default="$memory")
         self._frozen = False
 
     def freeze(self):
         self._frozen = True
-        self._init._frozen = True
+        if self._init is not None:
+            self._init._frozen = True
 
     @property
     def shape(self):

@@ -993,7 +993,7 @@ class Memory(Cell):
 
         self.width = width
         self.depth = depth
-        self.init = tuple(init)
+        self.init = tuple(init) if init is not None else None
         self.name = name
         self.attributes = attributes
 

@@ -49,8 +49,6 @@ class Memory(wiring.Component):
                 raise ValueError("Either 'data' or 'shape' needs to be given")
             if depth is None:
                 raise ValueError("Either 'data' or 'depth' needs to be given")
-            if init is None:
-                raise ValueError("Either 'data' or 'init' needs to be given")
             data = MemoryData(shape=shape, depth=depth, init=init, src_loc_at=1 + src_loc_at)
         else:
             if not isinstance(data, MemoryData):
